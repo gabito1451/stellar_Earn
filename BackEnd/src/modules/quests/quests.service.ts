@@ -216,6 +216,13 @@ export class QuestsService {
     await this.cacheService.deletePattern(CACHE_KEYS.QUESTS);
     await this.cacheService.delete(`${CACHE_KEYS.QUEST_DETAIL}:${id}`);
 
+    // Emit quest updated event
+    this.eventEmitter.emit('quest.updated', {
+      questId: id,
+      changes: updateQuestDto,
+      updatedAt: new Date(),
+    });
+
     return QuestResponseDto.fromEntity(updatedQuest);
   }
 

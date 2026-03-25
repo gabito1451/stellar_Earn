@@ -158,6 +158,15 @@ export class SubmissionsService {
       ),
     );
 
+    // Emit submission approved event
+    this.eventEmitter.emit('submission.approved', {
+      submissionId,
+      questId: updatedSubmission.questId,
+      userId: updatedSubmission.userId,
+      approvedBy: verifierId,
+      approvedAt: new Date(),
+    });
+
     return updatedSubmission;
   }
 

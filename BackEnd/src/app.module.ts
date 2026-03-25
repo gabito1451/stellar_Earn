@@ -16,6 +16,7 @@ import { SubmissionsModule } from './modules/submissions/submissions.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { JobsModule } from './modules/jobs/jobs.module';
 import { EmailModule } from './modules/email/email.module';
+import { UsersModule } from './modules/users/users.module';
 import { AnalyticsSnapshot } from './modules/analytics/entities/analytics-snapshot.entity';
 import { RefreshToken } from './modules/auth/entities/refresh-token.entity';
 import { Payout } from './modules/payouts/entities/payout.entity';
@@ -77,6 +78,7 @@ import { CsrfGuard } from './common/guards/csrf.guard';
     NotificationsModule,
     JobsModule,
     EmailModule,
+    UsersModule,
   ],
   controllers: [AppController],
   providers: [

@@ -1,7 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { AnalyticsAggregatePayload, MetricsCollectPayload, JobResult } from '../job.types';
-import { JobLogService } from './job-log.service';
+import { JobLogService } from '../services/job-log.service';
+import { AnalyticsAggregationService } from '../../analytics/services/aggregation.service';
+import { AnalyticsReportService, ReportGenerationOptions } from '../../analytics/services/report.service';
+import { ReportType, ReportFormat } from '../../analytics/entities/analytics-report.entity';
+import { SnapshotType } from '../../analytics/entities/analytics-snapshot.entity';
 
 /**
  * Analytics Processor
@@ -11,13 +15,17 @@ import { JobLogService } from './job-log.service';
 export class AnalyticsProcessor {
   private readonly logger = new Logger(AnalyticsProcessor.name);
 
-  constructor(private readonly jobLogService: JobLogService) {}
+  constructor(
+    private readonly jobLogService: JobLogService,
+    private readonly analyticsAggregationService: AnalyticsAggregationService,
+    private readonly analyticsReportService: AnalyticsReportService,
+  ) {}
 
   /**
    * Process analytics aggregation job
    */
   async processAggregation(job: Job<AnalyticsAggregatePayload>): Promise<JobResult> {
-    const { organizationId, aggregationType, metricsType } = job.data;
+    const { organizationId, aggregationType, metricsType, dateRange, specificIds } = job.data;
 
     try {
       await job.updateProgress(10);
@@ -26,8 +34,8 @@ export class AnalyticsProcessor {
       );
 
       // Validation
-      if (!organizationId || !aggregationType) {
-        throw new Error('Missing required analytics fields');
+      if (!aggregationType) {
+        throw new Error('Missing required aggregationType');
       }
 
       const validAggregationTypes = ['hourly', 'daily', 'weekly', 'monthly'];
@@ -37,37 +45,57 @@ export class AnalyticsProcessor {
 
       await job.updateProgress(20);
 
-      // TODO: Aggregate analytics data
-      // This would involve:
-      // 1. Determine time window based on aggregationType
-      // 2. Query raw analytics events
-      // 3. Group and aggregate by specified metrics
-      // 4. Calculate statistics (sum, avg, count, etc.)
-      // 5. Store aggregated data
-      // 6. Generate alerts if thresholds exceeded
+      // Determine date range
+      const { startDate, endDate } = dateRange ?
+        { startDate: new Date(dateRange.start), endDate: new Date(dateRange.end) } :
+        this.getDefaultDateRange(aggregationType);
 
-      const timeWindow = this.getTimeWindow(aggregationType);
+      const aggregationOptions = {
+        startDate,
+        endDate,
+        granularity: aggregationType as 'hourly' | 'daily' | 'weekly' | 'monthly',
+        organizationId,
+      };
 
-      await job.updateProgress(40);
+      await job.updateProgress(30);
 
-      // Simulate data aggregation
-      const rawDataPoints = Math.floor(Math.random() * 10000) + 1000;
-      const queryDuration = Math.floor(Math.random() * 5000) + 1000;
-      await new Promise((resolve) => setTimeout(resolve, queryDuration));
+      let processed = 0;
+      let skipped = 0;
 
-      await job.updateProgress(60);
+      // Determine which types to aggregate
+      const typesToAggregate = metricsType && metricsType.length > 0 ?
+        metricsType.map(type => this.mapMetricTypeToSnapshotType(type)).filter(Boolean) :
+        [SnapshotType.PLATFORM, SnapshotType.QUEST, SnapshotType.USER];
 
-      const aggregatedMetrics: Record<string, number> = {};
-      if (metricsType && metricsType.length > 0) {
-        for (const metricType of metricsType) {
-          aggregatedMetrics[metricType] = Math.floor(Math.random() * 100);
-        }
-      }
+      // Run batch aggregation
+      const batchResult = await this.analyticsAggregationService.runBatchAggregation({
+        ...aggregationOptions,
+        types: typesToAggregate,
+      });
+
+      processed = batchResult.processed;
+      skipped = batchResult.skipped;
 
       await job.updateProgress(80);
 
-      // Simulate storage
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      // If specific IDs are provided, aggregate those individually
+      if (specificIds && specificIds.length > 0) {
+        for (const id of specificIds) {
+          if (id.startsWith('quest_')) {
+            const questProcessed = await this.analyticsAggregationService.aggregateQuestData(
+              id.replace('quest_', ''),
+              aggregationOptions,
+            );
+            processed += questProcessed;
+          } else if (id.startsWith('user_')) {
+            const userProcessed = await this.analyticsAggregationService.aggregateUserData(
+              id.replace('user_', ''),
+              aggregationOptions,
+            );
+            processed += userProcessed;
+          }
+        }
+      }
 
       await job.updateProgress(100);
 
@@ -76,16 +104,18 @@ export class AnalyticsProcessor {
         data: {
           organizationId,
           aggregationType,
-          timeWindow,
-          rawDataPoints,
-          aggregatedMetrics,
+          dateRange: { start: startDate, end: endDate },
+          typesAggregated: typesToAggregate,
+          processed,
+          skipped,
+          specificIdsProcessed: specificIds?.length || 0,
           aggregatedAt: new Date(),
         },
         duration: Date.now() - job.timestamp,
       };
 
       this.logger.log(
-        `Analytics aggregated: ${rawDataPoints} data points processed`,
+        `Analytics aggregated: ${processed} snapshots processed, ${skipped} skipped`,
       );
       return result;
     } catch (error) {
@@ -99,8 +129,53 @@ export class AnalyticsProcessor {
   }
 
   /**
-   * Process metrics collection job
+   * Process report generation job
    */
+  async processReportGeneration(job: Job<any>): Promise<JobResult> {
+    const { reportType, reportFormat, parameters, filters, startDate, endDate, generatedById } = job.data;
+
+    try {
+      await job.updateProgress(10);
+      this.logger.log(`Processing report generation job ${job.id}: type=${reportType}`);
+
+      // Get user (simplified - in real implementation, fetch from database)
+      const generatedBy = { id: generatedById, email: 'system@stellarearn.com' };
+
+      const reportOptions: ReportGenerationOptions = {
+        type: reportType,
+        format: reportFormat,
+        parameters: parameters || {},
+        filters: filters || {},
+        startDate: new Date(startDate),
+        endDate: new Date(endDate),
+        generatedBy,
+      };
+
+      await job.updateProgress(50);
+
+      const report = await this.analyticsReportService.generateReport(reportOptions);
+
+      await job.updateProgress(100);
+
+      const result: JobResult = {
+        success: true,
+        data: {
+          reportId: report.id,
+          reportType,
+          reportFormat,
+          status: report.status,
+          generatedAt: new Date(),
+        },
+        duration: Date.now() - job.timestamp,
+      };
+
+      this.logger.log(`Report generation completed: ${report.id}`);
+      return result;
+    } catch (error) {
+      this.logger.error(`Error generating report: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
   async collectMetrics(job: Job<MetricsCollectPayload>): Promise<JobResult> {
     const { metricsToCollect, timeWindow } = job.data;
 
@@ -170,7 +245,7 @@ export class AnalyticsProcessor {
 
   // Helper methods
 
-  private getTimeWindow(
+  private getDefaultDateRange(
     aggregationType: 'hourly' | 'daily' | 'weekly' | 'monthly',
   ): { start: Date; end: Date } {
     const now = new Date();
@@ -192,6 +267,16 @@ export class AnalyticsProcessor {
     }
 
     return { start, end: now };
+  }
+
+  private mapMetricTypeToSnapshotType(metricType: string): SnapshotType | null {
+    const mapping: Record<string, SnapshotType> = {
+      platform: SnapshotType.PLATFORM,
+      quest: SnapshotType.QUEST,
+      user: SnapshotType.USER,
+    };
+
+    return mapping[metricType] || null;
   }
 
   private getMetricUnit(metric: string): string {

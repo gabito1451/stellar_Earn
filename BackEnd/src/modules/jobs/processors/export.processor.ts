@@ -1,7 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { DataExportPayload, ReportGeneratePayload, JobResult } from '../job.types';
 import { JobLogService } from './job-log.service';
+import { DataExport, DataExportStatus } from '../../users/entities/data-export.entity';
 
 /**
  * Data Export Processor
@@ -11,7 +14,11 @@ import { JobLogService } from './job-log.service';
 export class DataExportProcessor {
   private readonly logger = new Logger(DataExportProcessor.name);
 
-  constructor(private readonly jobLogService: JobLogService) {}
+  constructor(
+    private readonly jobLogService: JobLogService,
+    @InjectRepository(DataExport)
+    private readonly dataExportRepo: Repository<DataExport>,
+  ) {}
 
   /**
    * Process data export job
@@ -52,7 +59,7 @@ export class DataExportProcessor {
 
       // Simulate file generation
       const fileName = `export-${exportType}-${Date.now()}.${this.getFileExtension(format)}`;
-      const downloadUrl = `https://storage.example.com/exports/${fileName}`;
+      const downloadUrl = `${process.env.EXPORT_STORAGE_BASE_URL || 'https://storage.example.com/exports'}/${fileName}`;
 
       await job.updateProgress(75);
 
@@ -75,6 +82,21 @@ export class DataExportProcessor {
         duration: Date.now() - job.timestamp,
       };
 
+      // Update DB record if present
+      if (job.data && (job.data as any).exportId) {
+        try {
+          await this.dataExportRepo.update((job.data as any).exportId, {
+            status: DataExportStatus.COMPLETED,
+            fileName,
+            downloadUrl,
+            recordCount: result.data.recordCount,
+            exportedAt: result.data.exportedAt,
+          } as any);
+        } catch (err) {
+          this.logger.error('Failed to update data export record', err?.stack || err);
+        }
+      }
+
       this.logger.log(`Data export completed: ${fileName}`);
       return result;
     } catch (error) {
@@ -82,6 +104,17 @@ export class DataExportProcessor {
         `Error processing data export for org ${organizationId}: ${error.message}`,
         error.stack,
       );
+
+      // mark DB record as failed if exportId provided
+      if ((job.data as any)?.exportId) {
+        try {
+          await this.dataExportRepo.update((job.data as any).exportId, {
+            status: DataExportStatus.FAILED,
+          } as any);
+        } catch (err) {
+          this.logger.error('Failed to mark export record failed', err?.stack || err);
+        }
+      }
 
       throw error;
     }

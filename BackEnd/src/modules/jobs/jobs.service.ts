@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Queue, Worker, Job } from 'bullmq';
 import { QUEUES, DEFAULT_JOB_OPTIONS } from './jobs.constants';
+import { DataExportProcessor } from './processors/export.processor';
 
 const redisConnection = () => {
   const url = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
@@ -14,6 +15,8 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
   private workers: Worker[] = [];
   private emailProcessor: ((messageId: string, dto: any) => Promise<void>) | null = null;
 
+  constructor(private readonly dataExportProcessor?: DataExportProcessor) {}
+
   registerEmailProcessor(processor: (messageId: string, dto: any) => Promise<void>) {
     this.emailProcessor = processor;
   }
@@ -25,12 +28,17 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
     this.queues[QUEUES.SCHEDULED] = new Queue(QUEUES.SCHEDULED, redisConnection() as any);
     this.queues[QUEUES.DEAD_LETTER] = new Queue(QUEUES.DEAD_LETTER, redisConnection() as any);
     this.queues[QUEUES.EMAIL] = new Queue(QUEUES.EMAIL, redisConnection() as any);
+    this.queues[QUEUES.EXPORTS] = new Queue(QUEUES.EXPORTS, redisConnection() as any);
 
     this.createWorker(QUEUES.NOTIFICATIONS, this.handleNotification.bind(this));
     this.createWorker(QUEUES.ANALYTICS, this.handleAnalytics.bind(this));
     this.createWorker(QUEUES.CLEANUP, this.handleCleanup.bind(this));
     this.createWorker(QUEUES.SCHEDULED, this.handleScheduled.bind(this));
     this.createWorker(QUEUES.EMAIL, this.handleEmail.bind(this));
+    // register exports worker if processor available
+    if (this.dataExportProcessor && typeof this.dataExportProcessor.processExport === 'function') {
+      this.createWorker(QUEUES.EXPORTS, this.dataExportProcessor.processExport.bind(this.dataExportProcessor));
+    }
   }
 
   async onModuleDestroy() {

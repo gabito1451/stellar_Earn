@@ -8,14 +8,18 @@ import { Submission } from '../submissions/entities/submission.entity';
 import { Payout } from '../payouts/entities/payout.entity';
 import { CacheModule } from '../cache/cache.module';
 import { UserExperienceListener } from './events/user-experience.listener';
+import { DataExport } from './entities/data-export.entity';
+import { DataExportService } from './data-export.service';
+import { JobsModule } from '../jobs/jobs.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Quest, Submission, Payout]),
+    TypeOrmModule.forFeature([User, Quest, Submission, Payout, DataExport]),
     CacheModule,
+    JobsModule,
   ],
   controllers: [UsersController],
-  providers: [UsersService, UserExperienceListener],
-  exports: [UsersService],
+  providers: [UsersService, UserExperienceListener, DataExportService],
+  exports: [UsersService, DataExportService],
 })
 export class UsersModule {}

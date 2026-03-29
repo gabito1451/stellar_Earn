@@ -12,10 +12,11 @@ import { WebhookProcessor } from './processors/webhook.processor';
 import { AnalyticsProcessor } from './processors/analytics.processor';
 import { QuestProcessor } from './processors/quest.processor';
 import { JobLog, JobLogRetry, JobDependency, JobSchedule } from './entities/job-log.entity';
+import { DataExport } from '../users/entities/data-export.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([JobLog, JobLogRetry, JobDependency, JobSchedule]),
+    TypeOrmModule.forFeature([JobLog, JobLogRetry, JobDependency, JobSchedule, DataExport]),
   ],
   providers: [
     JobsService,

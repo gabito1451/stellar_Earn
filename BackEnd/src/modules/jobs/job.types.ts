@@ -116,6 +116,7 @@ export interface DataExportPayload extends JobPayload {
   exportType: 'users' | 'payouts' | 'quests' | 'analytics';
   format: 'csv' | 'json' | 'xlsx';
   userId: string; // Who requested the export
+  exportId?: string; // optional DB record id to correlate
 }
 
 export interface ReportGeneratePayload extends JobPayload {

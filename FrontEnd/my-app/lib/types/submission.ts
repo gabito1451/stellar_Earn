@@ -1,10 +1,4 @@
-export enum SubmissionStatus {
-  PENDING = 'PENDING',
-  APPROVED = 'APPROVED',
-  REJECTED = 'REJECTED',
-  PAID = 'PAID',
-  UNDER_REVIEW = 'UNDER_REVIEW',
-}
+import { SubmissionStatus } from './api.types';
 
 export interface Quest {
   id: string;

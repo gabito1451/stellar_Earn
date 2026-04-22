@@ -1,6 +1,7 @@
 'use client';
 
-import type { Submission } from '@/lib/types/dashboard';
+import type { Submission } from '@/lib/types/submission';
+import type { SubmissionStatus } from '@/lib/types/api.types';
 
 interface RecentSubmissionsProps {
   submissions: Submission[];
@@ -57,22 +58,27 @@ function SubmissionRowSkeleton() {
   );
 }
 
-function StatusBadge({ status }: { status: Submission['status'] }) {
-  const statusConfig = {
-    pending: {
+function StatusBadge({ status }: { status: SubmissionStatus }) {
+  const statusConfig: Record<SubmissionStatus, { label: string; className: string; icon: string }> = {
+    'Pending': {
       label: 'Pending',
       className: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
       icon: '⏳',
     },
-    approved: {
+    'Approved': {
       label: 'Approved',
       className: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
       icon: '✓',
     },
-    rejected: {
+    'Rejected': {
       label: 'Rejected',
       className: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
       icon: '✗',
+    },
+    'Paid': {
+      label: 'Paid',
+      className: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+      icon: '💰',
     },
   };
 
@@ -109,12 +115,12 @@ function SubmissionRow({ submission }: SubmissionRowProps) {
       <td className="py-3 pr-4">
         <span
           className={`font-medium ${
-            submission.status === 'approved'
+            submission.status === 'Approved'
               ? 'text-green-600 dark:text-green-400'
               : 'text-zinc-500 dark:text-zinc-400'
           }`}
         >
-          {submission.status === 'approved' ? '+' : ''}{submission.reward} XLM
+          {submission.status === 'Approved' ? '+' : ''}{submission.reward} XLM
         </span>
       </td>
       <td className="py-3 text-sm text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
